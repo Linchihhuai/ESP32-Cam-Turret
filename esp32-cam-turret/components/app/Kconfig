@@ -1,0 +1,11 @@
+menu "Turret application"
+
+config APP_SERVO_GPIO
+    int "Servo signal GPIO"
+    range 0 39
+    default 14
+    help
+        GPIO connected to the servo signal wire. Confirm it is available on
+        your board and is not shared with an enabled peripheral.
+
+endmenu
