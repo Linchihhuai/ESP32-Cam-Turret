@@ -4,5 +4,5 @@
 
 void app_main(void)
 {
-   // ESP_ERROR_CHECK(app_start());
+    ESP_ERROR_CHECK(app_start());
 }

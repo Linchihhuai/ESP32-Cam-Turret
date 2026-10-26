@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5f2">
+  <title>Turret Control</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4f5f2;
+      --panel: #fff;
+      --ink: #17201c;
+      --muted: #78817b;
+      --line: #e7eae5;
+      --green: #b9ef63;
+      --green-dark: #33551b;
+      --shadow: 0 12px 34px rgb(25 36 27 / 5%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 12% 0%, rgb(211 229 197 / 34%), transparent 32rem),
+        var(--paper);
+      color: var(--ink);
+    }
+
+    button { font: inherit; }
+
+    .shell {
+      width: min(1280px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 32px 0 36px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 44px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 750;
+      letter-spacing: -.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--ink);
+      color: var(--green);
+    }
+
+    .brand-mark svg { width: 21px; height: 21px; }
+
+    .topbar-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .preview-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border: 1px solid #dce5d2;
+      border-radius: 999px;
+      background: #f6faef;
+      color: #567b32;
+      letter-spacing: .08em;
+    }
+
+    .preview-chip::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #8dc54b;
+      content: "";
+    }
+
+    .intro {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #72816e;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 44px);
+      font-weight: 650;
+      letter-spacing: -.055em;
+      line-height: 1.04;
+    }
+
+    .subtitle {
+      margin: 11px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .control-panel { padding: 23px; }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 720;
+      letter-spacing: -.025em;
+    }
+
+    .section-note {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .axis-readouts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .axis-readout {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 15px 16px;
+      border: 1px solid #edf0eb;
+      border-radius: 12px;
+      background: #fbfcfa;
+    }
+
+    .axis-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #677168;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .axis-label::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #9bd34d;
+      content: "";
+    }
+
+    .axis-angle {
+      color: #27322a;
+      font-variant-numeric: tabular-nums;
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: -.045em;
+    }
+
+    .range-track {
+      position: relative;
+      height: 5px;
+      margin: 10px 2px 0;
+      border-radius: 5px;
+      background: #e7ebe3;
+    }
+
+    .range-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 0;
+      border-radius: inherit;
+      background: #9bd34d;
+      transition: left .18s ease, width .18s ease;
+    }
+
+    .range-pin {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 1;
+      width: 13px;
+      height: 13px;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      background: #679b31;
+      box-shadow: 0 0 0 1px #a6c783;
+      transform: translate(-50%, -50%);
+      transition: left .18s ease;
+    }
+
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      margin: 7px 2px 0;
+      color: #9aa19c;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .control-area {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px 0 22px;
+    }
+
+    .direction-pad {
+      display: grid;
+      width: 192px;
+      height: 192px;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      gap: 9px;
+    }
+
+    .direction-button {
+      display: grid;
+      min-width: 0;
+      place-items: center;
+      border: 1px solid #e4e9df;
+      border-radius: 12px;
+      background: #fff;
+      color: #4d5850;
+      cursor: pointer;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .direction-button:hover {
+      border-color: #c7dda9;
+      background: #f5faee;
+      box-shadow: 0 4px 12px rgb(72 112 41 / 8%);
+    }
+
+    .direction-button:active {
+      background: #eaf5db;
+      transform: scale(.95);
+    }
+
+    .direction-button:disabled {
+      cursor: wait;
+      opacity: .55;
+    }
+
+    .direction-button:focus-visible, .clear-button:focus-visible {
+      outline: 3px solid rgb(130 183 74 / 55%);
+      outline-offset: 2px;
+    }
+
+    .direction-button svg { width: 23px; height: 23px; }
+
+    .direction-button[data-direction="up"] { grid-area: 1 / 2; }
+    .direction-button[data-direction="left"] { grid-area: 2 / 1; }
+    .direction-button[data-direction="right"] { grid-area: 2 / 3; }
+    .direction-button[data-direction="down"] { grid-area: 3 / 2; }
+
+    .pad-center {
+      display: grid;
+      grid-area: 2 / 2;
+      place-items: center;
+      border: 1px solid #e9eee3;
+      border-radius: 50%;
+      background: #f7faf3;
+      color: #7d8978;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .12em;
+    }
+
+    .control-legend {
+      display: flex;
+      justify-content: center;
+      gap: 22px;
+      padding: 13px 0 0;
+      border-top: 1px solid #edf0eb;
+      color: #89928b;
+      font-size: 10px;
+    }
+
+    .control-legend strong {
+      color: #58645a;
+      font-weight: 700;
+    }
+
+    kbd {
+      padding: 2px 5px;
+      border: 1px solid #e2e6df;
+      border-radius: 4px;
+      background: #fff;
+      color: #677168;
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 650;
+    }
+
+    .activity-panel {
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+    }
+
+    .activity-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 23px 20px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .activity-title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      font-weight: 730;
+    }
+
+    .activity-title svg { width: 16px; height: 16px; color: #718568; }
+
+    .clear-button {
+      padding: 5px 7px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #7e8980;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .clear-button:hover { background: #f2f5ef; color: var(--ink); }
+
+    .log-list {
+      display: flex;
+      max-height: 490px;
+      flex: 1;
+      flex-direction: column;
+      gap: 0;
+      overflow: auto;
+      padding: 5px 20px;
+      scrollbar-color: #d7ded2 transparent;
+      scrollbar-width: thin;
+    }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 10px;
+      padding: 14px 0;
+      border-bottom: 1px solid #f0f2ee;
+      animation: appear .2s ease both;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      padding-top: 2px;
+      color: #9aa19c;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .log-message {
+      color: #39433c;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .log-message strong { color: #242e27; font-weight: 700; }
+
+    .log-empty {
+      margin: auto;
+      padding: 24px 0;
+      color: #929a94;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .activity-footer {
+      padding: 16px 20px 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .mode-card {
+      display: flex;
+      gap: 11px;
+      padding: 13px;
+      border: 1px solid #e8eedf;
+      border-radius: 11px;
+      background: #f8fbf4;
+    }
+
+    .mode-icon {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 8px;
+      background: #e8f2dc;
+      color: #63883f;
+    }
+
+    .mode-icon svg { width: 15px; height: 15px; }
+
+    .mode-copy strong {
+      display: block;
+      margin: 1px 0 4px;
+      font-size: 11px;
+      font-weight: 730;
+    }
+
+    .mode-copy span {
+      display: block;
+      color: #7d887c;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 18px;
+      color: #929a94;
+      font-size: 10px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: minmax(0, 1fr) 290px; }
+      .control-panel { padding: 18px; }
+      .axis-card { padding: 16px; }
+    }
+
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 28px, 560px); padding-top: 18px; }
+      .topbar { margin-bottom: 32px; }
+      .topbar-meta { gap: 0; }
+      .topbar-meta > span:first-child { display: none; }
+      .intro { align-items: start; margin-bottom: 22px; }
+      .layout { grid-template-columns: 1fr; }
+      .direction-pad { width: 176px; height: 176px; }
+      .activity-panel { min-height: 360px; }
+      .log-list { max-height: 310px; }
+      .footer { flex-direction: column; gap: 5px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 12h16M12 4v16M7.5 7.5l9 9m0-9-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </span>
+        <span>FIELD / TURRET</span>
+      </div>
+      <div class="topbar-meta">
+        <span>CONTROL DECK&nbsp; / &nbsp;01</span>
+        <span class="preview-chip">TILT SERVO</span>
+      </div>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Pan &amp; tilt system</p>
+        <h1 id="page-title">Turret control</h1>
+        <p class="subtitle">Tilt is connected. Base controls are waiting for a second servo.</p>
+      </div>
+    </section>
+
+    <div class="layout">
+      <section class="panel control-panel" aria-labelledby="controls-title">
+        <div class="section-heading">
+          <h2 id="controls-title">Servo controls</h2>
+          <span class="section-note">5° per press</span>
+        </div>
+
+        <div class="axis-readouts" aria-label="Current servo positions">
+          <div class="axis-readout">
+            <span class="axis-label">Tilt</span>
+            <span class="axis-angle"><span id="tilt-value" aria-live="polite">0</span>°</span>
+          </div>
+          <div class="axis-readout">
+            <span class="axis-label">Base · not connected</span>
+            <span class="axis-angle"><span id="base-value" aria-live="polite">0</span>°</span>
+          </div>
+        </div>
+        <div class="axis-readouts axis-ranges" aria-hidden="true">
+          <div>
+            <div class="range-track">
+              <span class="range-fill" id="tilt-fill"></span>
+              <span class="range-pin" id="tilt-pin"></span>
+            </div>
+            <div class="range-labels"><span>−90°</span><span>+90°</span></div>
+          </div>
+          <div>
+            <div class="range-track">
+              <span class="range-fill" id="base-fill"></span>
+              <span class="range-pin" id="base-pin"></span>
+            </div>
+            <div class="range-labels"><span>−90°</span><span>+90°</span></div>
+          </div>
+        </div>
+
+        <div class="control-area">
+          <div class="direction-pad" role="group" aria-label="Tilt and base direction controls">
+            <button class="direction-button" type="button" data-axis="tilt" data-direction="up" aria-label="Tilt up">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 15V5m0 0L5.5 9.5M10 5l4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="direction-button" type="button" data-axis="base" data-direction="left" aria-label="Turn base left">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15 10H5m0 0 4.5-4.5M5 10l4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span class="pad-center" aria-hidden="true">AIM</span>
+            <button class="direction-button" type="button" data-axis="base" data-direction="right" aria-label="Turn base right">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10h10m0 0-4.5-4.5M15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="direction-button" type="button" data-axis="tilt" data-direction="down" aria-label="Tilt down">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 5v10m0 0 4.5-4.5M10 15l-4.5-4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="control-legend">
+          <span><strong>UP / DOWN</strong>&nbsp; Tilt</span>
+          <span><strong>LEFT / RIGHT</strong>&nbsp; Base</span>
+          <span>Range&nbsp; ±90°</span>
+        </div>
+      </section>
+
+      <aside class="panel activity-panel" aria-labelledby="activity-title">
+        <div class="activity-header">
+          <div class="activity-title">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 5.5h12M4 10h12M4 14.5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="2.5" cy="5.5" r=".7" fill="currentColor"/><circle cx="2.5" cy="10" r=".7" fill="currentColor"/><circle cx="2.5" cy="14.5" r=".7" fill="currentColor"/>
+            </svg>
+            <h2 id="activity-title">Activity log</h2>
+          </div>
+          <button class="clear-button" id="clear-log" type="button">Clear</button>
+        </div>
+        <div class="log-list" id="log-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="activity-footer">
+          <div class="mode-card">
+            <span class="mode-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5 16 5v4.2c0 3.9-2.5 6.5-6 8.3-3.5-1.8-6-4.4-6-8.3V5l6-2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m7.5 10 1.7 1.7 3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="mode-copy">
+              <strong>Tilt servo connected</strong>
+              <span>Up and down move the live tilt servo. Base buttons are inactive until a second servo is installed.</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <span>ESP32-CAM TURRET&nbsp; / &nbsp;LIVE TILT CONTROL</span>
+      <span>Position range: −90° to +90°</span>
+    </footer>
+  </main>
+
+  <script>
+    const positions = { tilt: 0, base: 0 };
+    const stepDegrees = 5;
+    const minimum = -90;
+    const maximum = 90;
+    const logList = document.getElementById("log-list");
+
+    function renderAxis(axis) {
+      const value = positions[axis];
+      const valueElement = document.getElementById(`${axis}-value`);
+      const pin = document.getElementById(`${axis}-pin`);
+      const fill = document.getElementById(`${axis}-fill`);
+      const normalized = (value - minimum) / (maximum - minimum);
+      const centerPercent = normalized * 100;
+
+      valueElement.textContent = value > 0 ? `+${value}` : `${value}`;
+      pin.style.left = `${centerPercent}%`;
+      fill.style.left = `${Math.min(centerPercent, 50)}%`;
+      fill.style.width = `${Math.abs(centerPercent - 50)}%`;
+    }
+
+    function addLog(message) {
+      const emptyMessage = logList.querySelector(".log-empty");
+      if (emptyMessage) emptyMessage.remove();
+
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const time = document.createElement("time");
+      time.className = "log-time";
+      time.dateTime = new Date().toISOString();
+      time.textContent = new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }).format(new Date());
+      const text = document.createElement("div");
+      text.className = "log-message";
+      text.textContent = message;
+      entry.append(time, text);
+      logList.prepend(entry);
+
+      while (logList.children.length > 50) {
+        logList.lastElementChild.remove();
+      }
+    }
+
+    document.querySelectorAll(".direction-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const { axis, direction } = button.dataset;
+        if (axis === "base") {
+          addLog("Base servo is not connected yet. No movement sent.");
+          return;
+        }
+
+        const increment = direction === "up" || direction === "right" ? stepDegrees : -stepDegrees;
+        const next = Math.max(minimum, Math.min(maximum, positions[axis] + increment));
+        const directionName = {
+          up: "up",
+          down: "down",
+          left: "left",
+          right: "right"
+        }[direction];
+
+        if (next === positions[axis]) {
+          addLog(`${axis === "tilt" ? "Tilt" : "Base"} is at its ${increment > 0 ? "upper" : "lower"} limit (${next}°).`);
+          return;
+        }
+
+        const tiltButtons = document.querySelectorAll('.direction-button[data-axis="tilt"]');
+        tiltButtons.forEach((tiltButton) => { tiltButton.disabled = true; });
+        try {
+          const response = await fetch("/api/tilt", {
+            method: "POST",
+            headers: { "Content-Type": "text/plain" },
+            body: `${next}`
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || `Request failed (${response.status})`);
+          }
+
+          positions.tilt = result.angle;
+          renderAxis("tilt");
+          addLog(`Tilt moved ${directionName} to ${result.angle > 0 ? "+" : ""}${result.angle}°.`);
+        } catch (error) {
+          addLog(`Tilt command failed: ${error.message}`);
+        } finally {
+          tiltButtons.forEach((tiltButton) => { tiltButton.disabled = false; });
+        }
+      });
+    });
+
+    document.getElementById("clear-log").addEventListener("click", () => {
+      logList.replaceChildren();
+      const emptyMessage = document.createElement("p");
+      emptyMessage.className = "log-empty";
+      emptyMessage.textContent = "No activity yet. Use a direction button to begin.";
+      logList.append(emptyMessage);
+    });
+
+    fetch("/api/tilt")
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `Request failed (${response.status})`);
+        }
+        positions.tilt = result.angle;
+        renderAxis("tilt");
+        addLog(`Connected to tilt servo at ${result.angle > 0 ? "+" : ""}${result.angle}°.`);
+      })
+      .catch((error) => {
+        addLog(`Could not connect to tilt servo: ${error.message}`);
+      });
+  </script>
+</body>
+</html>
