@@ -4,10 +4,10 @@ ESP-IDF firmware for an ESP32-CAM pan/tilt turret. The current firmware hosts a 
 
 ## Components
 
-- `app`: initializes NVS and the tilt servo, then starts the web control.
+- `app`: initializes NVS and the tilt servo, then starts the web control. Camera support is optional and disabled by default.
 - `servo`: generates 50 Hz servo PWM with the LEDC peripheral and tracks the commanded angle.
 - `web_ui`: serves the control page and tilt API over the ESP32 SoftAP and, when configured, the local Wi-Fi network.
-- `cam`: reserved camera component; initialization currently returns `ESP_ERR_NOT_SUPPORTED`.
+- `cam`: initializes the OV5640 and provides JPEG frames for the MJPEG stream.
 
 ## Servo test wiring
 
@@ -29,12 +29,22 @@ The tilt servo accepts whole-number angles from -90 to +90 degrees. The driver m
 
 The left/right base controls are intentionally inactive until a second servo is installed. They do not send hardware commands.
 
+## Camera streaming (optional)
+
+Camera support is disabled by default. To enable it, select **Turret camera > Enable OV5640 camera and MJPEG stream** in `idf.py menuconfig`. The camera is not initialized during boot or when loading the control page; it initializes only after you click **Start feed** in the built-in camera panel. Camera video is requested from a separate HTTP server on port 81, while the control page and servo API remain on port 80. A camera initialization or stream failure does not stop the control page or servo. The stream accepts one client, validates JPEG frames, and caps output to about 10 frames per second. The camera pin defaults in **Turret camera** match this board pin map: XCLK 15, PCLK 13, VSYNC 6, HREF 7, D0-D7 11/9/8/10/12/18/17/16, SIOD 4, SIOC 5, with PWDN and RESET unused. Change them if your board wiring differs.
+
+The control page source is `components/web_ui/index.html`. Its checked-in `index.html.gz` is the gzip-compressed asset embedded in firmware; regenerate it after editing the HTML with `python -c "import gzip,pathlib; p=pathlib.Path('components/web_ui/index.html'); pathlib.Path('components/web_ui/index.html.gz').write_bytes(gzip.compress(p.read_bytes(), compresslevel=9, mtime=0))"`.
+
+This board is marked N16R8, so the firmware needs 16 MB flash and octal PSRAM enabled. `sdkconfig.defaults` contains those defaults for a fresh configuration. For an existing `sdkconfig`, verify **Serial flasher config > Flash size** is 16 MB and **Component config > ESP PSRAM** is enabled in octal mode at 80 MHz, with PSRAM available to the heap. OV5640 JPEG streaming needs PSRAM. The diagnostic camera settings use VGA JPEG, one frame buffer, and 10 MHz XCLK to reduce capture load while troubleshooting.
+
+After building and flashing, open the control page at the ESP32's LAN address. The page and tilt API use port 80; the separate MJPEG stream uses port 81. The stream is unauthenticated and available to devices that can reach the ESP32 on the local network; do not expose it to the public internet.
+
 ## Build and flash
 
 Run these commands from this project directory in an ESP-IDF v6.0 environment:
 
 ```powershell
-idf.py set-target esp32
+idf.py set-target esp32s3
 idf.py menuconfig
 idf.py build
 idf.py -p COMx flash monitor

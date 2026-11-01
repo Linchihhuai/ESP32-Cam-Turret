@@ -133,6 +133,50 @@
       line-height: 1.6;
     }
 
+    .camera-panel { margin-bottom: 18px; padding: 18px; }
+
+    .camera-frame {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      margin-top: 14px;
+      border-radius: 12px;
+      background: #101713;
+    }
+
+    .camera-frame img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .camera-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .camera-status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .camera-toggle {
+      padding: 8px 12px;
+      border: 1px solid #dce5d2;
+      border-radius: 8px;
+      background: #f6faef;
+      color: #456426;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .camera-toggle:disabled { cursor: wait; opacity: .6; }
+
     .layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 340px;
@@ -542,6 +586,20 @@
       </div>
     </section>
 
+    <section class="panel camera-panel" aria-labelledby="camera-title">
+      <div class="section-heading">
+        <h2 id="camera-title">Live camera</h2>
+        <span class="section-note">Off until started</span>
+      </div>
+      <div class="camera-frame">
+        <img id="camera-stream" alt="Live video from the turret camera">
+      </div>
+      <div class="camera-controls">
+        <span class="camera-status" id="camera-status" role="status" aria-live="polite">Camera stream is stopped.</span>
+        <button class="camera-toggle" id="camera-toggle" type="button" aria-pressed="false">Start feed</button>
+      </div>
+    </section>
+
     <div class="layout">
       <section class="panel control-panel" aria-labelledby="controls-title">
         <div class="section-heading">
@@ -638,6 +696,40 @@
     const minimum = -90;
     const maximum = 90;
     const logList = document.getElementById("log-list");
+    const cameraStream = document.getElementById("camera-stream");
+    const cameraStatus = document.getElementById("camera-status");
+    const cameraToggle = document.getElementById("camera-toggle");
+    let cameraActive = false;
+
+    function stopCamera() {
+      cameraActive = false;
+      cameraStream.removeAttribute("src");
+      cameraToggle.textContent = "Start feed";
+      cameraToggle.setAttribute("aria-pressed", "false");
+    }
+
+    cameraToggle.addEventListener("click", () => {
+      if (cameraActive) {
+        stopCamera();
+        cameraStatus.textContent = "Camera stream stopped.";
+        return;
+      }
+
+      cameraActive = true;
+      cameraToggle.textContent = "Stop feed";
+      cameraToggle.setAttribute("aria-pressed", "true");
+      cameraStatus.textContent = "Connecting to camera…";
+      cameraStream.src = `${window.location.protocol}//${window.location.hostname}:81/stream?start=${Date.now()}`;
+    });
+
+    cameraStream.addEventListener("load", () => {
+      if (cameraActive) cameraStatus.textContent = "Live camera feed.";
+    });
+    cameraStream.addEventListener("error", () => {
+      if (!cameraActive) return;
+      cameraStatus.textContent = "Camera unavailable. Servo controls remain independent.";
+      stopCamera();
+    });
 
     function renderAxis(axis) {
       const value = positions[axis];

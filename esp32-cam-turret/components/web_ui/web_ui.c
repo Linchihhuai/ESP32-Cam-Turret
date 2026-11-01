@@ -14,14 +14,30 @@
 #include "esp_netif.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_wifi.h"
+#if CONFIG_CAM_ENABLE
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#endif
 #include "servo.h"
 
 #define REQUEST_BODY_MAX_LENGTH 64
+#if CONFIG_CAM_ENABLE
+#include "cam.h"
+#define STREAM_HTTP_PORT 81
+#define STREAM_BOUNDARY "turret-frame-boundary"
+#endif
 
 static const char *TAG = "turret_web";
 static httpd_handle_t server;
+#if CONFIG_CAM_ENABLE
+static httpd_handle_t stream_server;
+static const char *STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" STREAM_BOUNDARY;
+static const char *STREAM_PART_BOUNDARY = "\r\n--" STREAM_BOUNDARY "\r\n";
+static const char *STREAM_PART_HEADER = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+#endif
 
-extern const uint8_t index_html_start[] asm("_binary_index_html_start");
+extern const uint8_t index_html_gz_start[] asm("_binary_index_html_gz_start");
+extern const uint8_t index_html_gz_end[] asm("_binary_index_html_gz_end");
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
@@ -45,8 +61,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
 static esp_err_t index_handler(httpd_req_t *request)
 {
-    httpd_resp_set_type(request, "text/html; charset=utf-8");
-    return httpd_resp_send(request, (const char *)index_html_start, HTTPD_RESP_USE_STRLEN);
+    ESP_LOGI(TAG, "Serving control page");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_type(request, "text/html; charset=utf-8"),
+                        TAG, "Failed to set control page content type");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_hdr(request, "Content-Encoding", "gzip"),
+                        TAG, "Failed to set control page compression header");
+    const size_t page_length = (size_t)(index_html_gz_end - index_html_gz_start);
+    const esp_err_t err = httpd_resp_send(request, (const char *)index_html_gz_start, page_length);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send control page: %s", esp_err_to_name(err));
+    }
+    return err;
 }
 
 static esp_err_t send_error(httpd_req_t *request, const char *status, const char *message)
@@ -120,6 +145,77 @@ static esp_err_t set_tilt_handler(httpd_req_t *request)
     return httpd_resp_send(request, response, response_length);
 }
 
+#if CONFIG_CAM_ENABLE
+static esp_err_t camera_stream_handler(httpd_req_t *request)
+{
+    if (!turret_camera_is_ready()) {
+        const esp_err_t init_err = turret_camera_init();
+        if (init_err != ESP_OK) {
+            httpd_resp_set_status(request, "503 Service Unavailable");
+            httpd_resp_set_type(request, "text/plain");
+            ESP_LOGW(TAG, "Camera stream request failed during initialization: %s",
+                     esp_err_to_name(init_err));
+            return httpd_resp_sendstr(request, "Camera is unavailable; control page is unaffected.");
+        }
+    }
+
+    ESP_RETURN_ON_ERROR(httpd_resp_set_type(request, STREAM_CONTENT_TYPE),
+                        TAG, "Failed to set camera stream content type");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_hdr(request, "Cache-Control", "no-store"),
+                        TAG, "Failed to set camera stream cache header");
+
+    char part_header[64];
+    bool stream_started = false;
+    while (true) {
+        camera_fb_t *frame = turret_camera_acquire_frame();
+        if (frame == NULL) {
+            ESP_LOGE(TAG, "Camera frame capture failed");
+            if (!stream_started) {
+                return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                           "Camera frame capture failed");
+            }
+            httpd_resp_send_chunk(request, NULL, 0);
+            return ESP_FAIL;
+        }
+        if (frame->format != PIXFORMAT_JPEG || frame->len < 2 ||
+            frame->buf[0] != 0xff || frame->buf[1] != 0xd8) {
+            ESP_LOGE(TAG, "Camera returned an invalid JPEG frame (format=%d, length=%u)",
+                     frame->format, (unsigned int)frame->len);
+            turret_camera_return_frame(frame);
+            if (!stream_started) {
+                return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                           "Camera returned an invalid JPEG frame");
+            }
+            httpd_resp_send_chunk(request, NULL, 0);
+            return ESP_FAIL;
+        }
+
+        esp_err_t err = httpd_resp_send_chunk(request, STREAM_PART_BOUNDARY, strlen(STREAM_PART_BOUNDARY));
+        if (err == ESP_OK) {
+            stream_started = true;
+        }
+        if (err == ESP_OK) {
+            const int header_length = snprintf(part_header, sizeof(part_header), STREAM_PART_HEADER,
+                                               (unsigned int)frame->len);
+            if (header_length < 0 || (size_t)header_length >= sizeof(part_header)) {
+                ESP_LOGE(TAG, "Camera stream frame header exceeded its buffer");
+                err = ESP_FAIL;
+            } else {
+                err = httpd_resp_send_chunk(request, part_header, (size_t)header_length);
+            }
+        }
+        if (err == ESP_OK) {
+            err = httpd_resp_send_chunk(request, (const char *)frame->buf, frame->len);
+        }
+        turret_camera_return_frame(frame);
+        if (err != ESP_OK) {
+            return err;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+#endif
+
 esp_err_t web_ui_start(void)
 {
     const size_t ssid_length = strlen(CONFIG_WEB_UI_AP_SSID);
@@ -179,6 +275,7 @@ esp_err_t web_ui_start(void)
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "SoftAP start failed");
 
     httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
+    server_config.send_wait_timeout = 30;
     ESP_RETURN_ON_ERROR(httpd_start(&server, &server_config), TAG, "HTTP server start failed");
 
     const httpd_uri_t index_uri = {
@@ -199,6 +296,35 @@ esp_err_t web_ui_start(void)
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &index_uri), TAG, "Control page route registration failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &get_tilt_uri), TAG, "Tilt read route registration failed");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &set_tilt_uri), TAG, "Tilt control route registration failed");
+    ESP_LOGI(TAG, "HTTP control server started on port %d", server_config.server_port);
+
+#if CONFIG_CAM_ENABLE
+    httpd_config_t stream_config = HTTPD_DEFAULT_CONFIG();
+    stream_config.server_port = STREAM_HTTP_PORT;
+    stream_config.ctrl_port = server_config.ctrl_port + 1;
+    stream_config.max_open_sockets = 1;
+    stream_config.send_wait_timeout = 30;
+    esp_err_t stream_err = httpd_start(&stream_server, &stream_config);
+    if (stream_err == ESP_OK) {
+        const httpd_uri_t camera_stream_uri = {
+            .uri = "/stream",
+            .method = HTTP_GET,
+            .handler = camera_stream_handler,
+        };
+        stream_err = httpd_register_uri_handler(stream_server, &camera_stream_uri);
+        if (stream_err != ESP_OK) {
+            ESP_LOGW(TAG, "Camera stream route registration failed: %s",
+                     esp_err_to_name(stream_err));
+            httpd_stop(stream_server);
+            stream_server = NULL;
+        }
+    } else {
+        ESP_LOGW(TAG, "Camera stream server start failed: %s", esp_err_to_name(stream_err));
+    }
+    if (stream_err == ESP_OK) {
+        ESP_LOGI(TAG, "Separate camera stream available on HTTP port %d", STREAM_HTTP_PORT);
+    }
+#endif
 
     ESP_LOGI(TAG, "Control Wi-Fi network '%s' started; fallback address is http://192.168.4.1",
              CONFIG_WEB_UI_AP_SSID);

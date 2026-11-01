@@ -1,0 +1,31 @@
+menu "Turret web control"
+
+config WEB_UI_AP_SSID
+    string "Control Wi-Fi network name"
+    default "Turret-Control"
+    help
+        Wi-Fi network name created by the ESP32 for the turret control page.
+
+config WEB_UI_AP_PASSWORD
+    string "Control Wi-Fi password"
+    default "turret-demo-8264"
+    help
+        WPA2 password for the ESP32 control network. Use at least 8 characters
+        and change the default before deploying outside a trusted test area.
+
+config WEB_UI_STA_SSID
+    string "Local Wi-Fi network name (SSID)"
+    default ""
+    help
+        SSID of the 2.4 GHz Wi-Fi network the ESP32 should join. Leave empty
+        to use only the ESP32 control network.
+
+config WEB_UI_STA_PASSWORD
+    string "Local Wi-Fi password"
+    default ""
+    help
+        Password for the local Wi-Fi network. Leave empty only for an open
+        network. Configure credentials locally with menuconfig; do not commit
+        them to source control.
+
+endmenu
