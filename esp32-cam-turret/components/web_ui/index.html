@@ -221,6 +221,8 @@
       margin-top: 24px;
     }
 
+    .axis-readouts.base-only { grid-template-columns: minmax(0, 1fr); }
+
     .axis-readout {
       display: flex;
       align-items: baseline;
@@ -257,49 +259,6 @@
       letter-spacing: -.045em;
     }
 
-    .range-track {
-      position: relative;
-      height: 5px;
-      margin: 10px 2px 0;
-      border-radius: 5px;
-      background: #e7ebe3;
-    }
-
-    .range-fill {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 50%;
-      width: 0;
-      border-radius: inherit;
-      background: #9bd34d;
-      transition: left .18s ease, width .18s ease;
-    }
-
-    .range-pin {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      z-index: 1;
-      width: 13px;
-      height: 13px;
-      border: 3px solid #fff;
-      border-radius: 50%;
-      background: #679b31;
-      box-shadow: 0 0 0 1px #a6c783;
-      transform: translate(-50%, -50%);
-      transition: left .18s ease;
-    }
-
-    .range-labels {
-      display: flex;
-      justify-content: space-between;
-      margin: 7px 2px 0;
-      color: #9aa19c;
-      font-size: 10px;
-      font-variant-numeric: tabular-nums;
-    }
-
     .control-area {
       display: flex;
       align-items: center;
@@ -319,6 +278,7 @@
       display: grid;
       min-width: 0;
       place-items: center;
+      touch-action: none;
       border: 1px solid #e4e9df;
       border-radius: 12px;
       background: #fff;
@@ -340,8 +300,8 @@
     }
 
     .direction-button:disabled {
-      cursor: wait;
-      opacity: .55;
+      cursor: not-allowed;
+      opacity: .42;
     }
 
     .direction-button:focus-visible, .clear-button:focus-visible {
@@ -574,15 +534,15 @@
       </div>
       <div class="topbar-meta">
         <span>CONTROL DECK&nbsp; / &nbsp;01</span>
-        <span class="preview-chip">TILT SERVO</span>
+        <span class="preview-chip">BASE SERVO</span>
       </div>
     </header>
 
     <section class="intro" aria-labelledby="page-title">
       <div>
-        <p class="eyebrow">Pan &amp; tilt system</p>
+        <p class="eyebrow">Single-axis control</p>
         <h1 id="page-title">Turret control</h1>
-        <p class="subtitle">Tilt is connected. Base controls are waiting for a second servo.</p>
+        <p class="subtitle">Base servo connected. Tilt control is disabled.</p>
       </div>
     </section>
 
@@ -604,57 +564,36 @@
       <section class="panel control-panel" aria-labelledby="controls-title">
         <div class="section-heading">
           <h2 id="controls-title">Servo controls</h2>
-          <span class="section-note">5° per press</span>
+          <span class="section-note">Hold to turn · release to stop</span>
         </div>
 
-        <div class="axis-readouts" aria-label="Current servo positions">
+        <div class="axis-readouts base-only" aria-label="Current base motion">
           <div class="axis-readout">
-            <span class="axis-label">Tilt</span>
-            <span class="axis-angle"><span id="tilt-value" aria-live="polite">0</span>°</span>
-          </div>
-          <div class="axis-readout">
-            <span class="axis-label">Base · not connected</span>
-            <span class="axis-angle"><span id="base-value" aria-live="polite">0</span>°</span>
-          </div>
-        </div>
-        <div class="axis-readouts axis-ranges" aria-hidden="true">
-          <div>
-            <div class="range-track">
-              <span class="range-fill" id="tilt-fill"></span>
-              <span class="range-pin" id="tilt-pin"></span>
-            </div>
-            <div class="range-labels"><span>−90°</span><span>+90°</span></div>
-          </div>
-          <div>
-            <div class="range-track">
-              <span class="range-fill" id="base-fill"></span>
-              <span class="range-pin" id="base-pin"></span>
-            </div>
-            <div class="range-labels"><span>−90°</span><span>+90°</span></div>
+            <span class="axis-label">Base motion</span>
+            <span class="axis-angle" id="base-value" role="status" aria-live="polite">Stopped</span>
           </div>
         </div>
 
         <div class="control-area">
-          <div class="direction-pad" role="group" aria-label="Tilt and base direction controls">
-            <button class="direction-button" type="button" data-axis="tilt" data-direction="up" aria-label="Tilt up">
+          <div class="direction-pad" role="group" aria-label="Turret direction controls">
+            <button class="direction-button" type="button" data-axis="tilt" data-direction="up" disabled aria-label="Tilt up, unavailable because no tilt servo is connected" title="Tilt servo not connected">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 15V5m0 0L5.5 9.5M10 5l4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button class="direction-button" type="button" data-axis="base" data-direction="left" aria-label="Turn base left">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15 10H5m0 0 4.5-4.5M5 10l4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <span class="pad-center" aria-hidden="true">AIM</span>
+            <span class="pad-center" aria-hidden="true">BASE</span>
             <button class="direction-button" type="button" data-axis="base" data-direction="right" aria-label="Turn base right">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10h10m0 0-4.5-4.5M15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <button class="direction-button" type="button" data-axis="tilt" data-direction="down" aria-label="Tilt down">
+            <button class="direction-button" type="button" data-axis="tilt" data-direction="down" disabled aria-label="Tilt down, unavailable because no tilt servo is connected" title="Tilt servo not connected">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 5v10m0 0 4.5-4.5M10 15l-4.5-4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
         </div>
         <div class="control-legend">
-          <span><strong>UP / DOWN</strong>&nbsp; Tilt</span>
-          <span><strong>LEFT / RIGHT</strong>&nbsp; Base</span>
-          <span>Range&nbsp; ±90°</span>
+          <span><strong>HOLD LEFT / RIGHT</strong>&nbsp; Release to stop</span>
+          <span><strong>UP / DOWN</strong>&nbsp; Tilt not connected</span>
         </div>
       </section>
 
@@ -676,8 +615,8 @@
               <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5 16 5v4.2c0 3.9-2.5 6.5-6 8.3-3.5-1.8-6-4.4-6-8.3V5l6-2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m7.5 10 1.7 1.7 3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
             <div class="mode-copy">
-              <strong>Tilt servo connected</strong>
-              <span>Up and down move the live tilt servo. Base buttons are inactive until a second servo is installed.</span>
+              <strong>Base servo connected</strong>
+              <span>Hold left or right to rotate; releasing stops it. Tilt arrows remain visible but are disabled.</span>
             </div>
           </div>
         </div>
@@ -685,21 +624,26 @@
     </div>
 
     <footer class="footer">
-      <span>ESP32-CAM TURRET&nbsp; / &nbsp;LIVE TILT CONTROL</span>
-      <span>Position range: −90° to +90°</span>
+      <span>ESP32-CAM TURRET&nbsp; / &nbsp;LIVE BASE CONTROL</span>
+      <span>Release either direction to stop the base</span>
     </footer>
   </main>
 
   <script>
-    const positions = { tilt: 0, base: 0 };
-    const stepDegrees = 5;
-    const minimum = -90;
-    const maximum = 90;
+    const baseLeftSpeed = -5;
+    const baseRightSpeed = 10;
+    const baseHeartbeatIntervalMs = 250;
+    const baseRequestTimeoutMs = 450;
     const logList = document.getElementById("log-list");
     const cameraStream = document.getElementById("camera-stream");
     const cameraStatus = document.getElementById("camera-status");
     const cameraToggle = document.getElementById("camera-toggle");
     let cameraActive = false;
+    let activeBaseSpeed = 0;
+    let baseHeartbeatTimer = null;
+    let baseCommandInFlight = false;
+    let pendingBaseSpeed = null;
+    let baseRequestFailed = false;
 
     function stopCamera() {
       cameraActive = false;
@@ -731,18 +675,69 @@
       stopCamera();
     });
 
-    function renderAxis(axis) {
-      const value = positions[axis];
-      const valueElement = document.getElementById(`${axis}-value`);
-      const pin = document.getElementById(`${axis}-pin`);
-      const fill = document.getElementById(`${axis}-fill`);
-      const normalized = (value - minimum) / (maximum - minimum);
-      const centerPercent = normalized * 100;
+    function renderBaseSpeed(speed) {
+      const state = speed < 0 ? "Turning left" : speed > 0 ? "Turning right" : "Stopped";
+      document.getElementById("base-value").textContent = state;
+    }
 
-      valueElement.textContent = value > 0 ? `+${value}` : `${value}`;
-      pin.style.left = `${centerPercent}%`;
-      fill.style.left = `${Math.min(centerPercent, 50)}%`;
-      fill.style.width = `${Math.abs(centerPercent - 50)}%`;
+    function queueBaseSpeed(speed) {
+      pendingBaseSpeed = speed;
+      if (baseCommandInFlight) return;
+
+      baseCommandInFlight = true;
+      void (async () => {
+        while (pendingBaseSpeed !== null) {
+          const commandSpeed = pendingBaseSpeed;
+          pendingBaseSpeed = null;
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), baseRequestTimeoutMs);
+          try {
+            const response = await fetch("/api/base", {
+              method: "POST",
+              headers: { "Content-Type": "text/plain" },
+              body: `${commandSpeed}`,
+              keepalive: commandSpeed === 0,
+              signal: controller.signal
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.error || `Request failed (${response.status})`);
+            }
+            baseRequestFailed = false;
+          } catch (error) {
+            const message = error.name === "AbortError" ? "Request timed out" : error.message;
+            if (!baseRequestFailed) addLog(`Base command failed: ${message}`);
+            baseRequestFailed = true;
+          } finally {
+            window.clearTimeout(timeout);
+          }
+        }
+        baseCommandInFlight = false;
+      })();
+    }
+
+    function setBaseSpeed(speed) {
+      if (activeBaseSpeed === speed) return;
+      activeBaseSpeed = speed;
+      renderBaseSpeed(speed);
+      queueBaseSpeed(speed);
+      addLog(speed === 0 ? "Base stopped." : `Turning base ${speed < 0 ? "left" : "right"}.`);
+    }
+
+    function stopBaseDrive() {
+      if (baseHeartbeatTimer !== null) {
+        window.clearInterval(baseHeartbeatTimer);
+        baseHeartbeatTimer = null;
+      }
+      setBaseSpeed(0);
+    }
+
+    function startBaseDrive(speed) {
+      if (baseHeartbeatTimer !== null) {
+        window.clearInterval(baseHeartbeatTimer);
+      }
+      setBaseSpeed(speed);
+      baseHeartbeatTimer = window.setInterval(() => queueBaseSpeed(speed), baseHeartbeatIntervalMs);
     }
 
     function addLog(message) {
@@ -771,72 +766,61 @@
       }
     }
 
-    document.querySelectorAll(".direction-button").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const { axis, direction } = button.dataset;
-        if (axis === "base") {
-          addLog("Base servo is not connected yet. No movement sent.");
-          return;
-        }
-
-        const increment = direction === "up" || direction === "right" ? stepDegrees : -stepDegrees;
-        const next = Math.max(minimum, Math.min(maximum, positions[axis] + increment));
-        const directionName = {
-          up: "up",
-          down: "down",
-          left: "left",
-          right: "right"
-        }[direction];
-
-        if (next === positions[axis]) {
-          addLog(`${axis === "tilt" ? "Tilt" : "Base"} is at its ${increment > 0 ? "upper" : "lower"} limit (${next}°).`);
-          return;
-        }
-
-        const tiltButtons = document.querySelectorAll('.direction-button[data-axis="tilt"]');
-        tiltButtons.forEach((tiltButton) => { tiltButton.disabled = true; });
-        try {
-          const response = await fetch("/api/tilt", {
-            method: "POST",
-            headers: { "Content-Type": "text/plain" },
-            body: `${next}`
-          });
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result.error || `Request failed (${response.status})`);
-          }
-
-          positions.tilt = result.angle;
-          renderAxis("tilt");
-          addLog(`Tilt moved ${directionName} to ${result.angle > 0 ? "+" : ""}${result.angle}°.`);
-        } catch (error) {
-          addLog(`Tilt command failed: ${error.message}`);
-        } finally {
-          tiltButtons.forEach((tiltButton) => { tiltButton.disabled = false; });
-        }
+    document.querySelectorAll('.direction-button[data-axis="base"]').forEach((button) => {
+      const speed = button.dataset.direction === "left" ? baseLeftSpeed : baseRightSpeed;
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        startBaseDrive(speed);
       });
+      button.addEventListener("pointerup", stopBaseDrive);
+      button.addEventListener("pointercancel", stopBaseDrive);
+      button.addEventListener("lostpointercapture", stopBaseDrive);
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== " " && event.key !== "Enter") return;
+        event.preventDefault();
+        startBaseDrive(speed);
+      });
+      button.addEventListener("keyup", (event) => {
+        if (event.key === " " || event.key === "Enter") stopBaseDrive();
+      });
+      button.addEventListener("blur", stopBaseDrive);
+    });
+
+    window.addEventListener("blur", stopBaseDrive);
+    window.addEventListener("pagehide", () => {
+      stopBaseDrive();
+      navigator.sendBeacon("/api/base", new Blob(["0"], { type: "text/plain" }));
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopBaseDrive();
     });
 
     document.getElementById("clear-log").addEventListener("click", () => {
       logList.replaceChildren();
       const emptyMessage = document.createElement("p");
       emptyMessage.className = "log-empty";
-      emptyMessage.textContent = "No activity yet. Use a direction button to begin.";
+      emptyMessage.textContent = "No activity yet. Hold a base direction button to begin.";
       logList.append(emptyMessage);
     });
 
-    fetch("/api/tilt")
+    addLog("Connecting to base servo…");
+    fetch("/api/base")
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) {
           throw new Error(result.error || `Request failed (${response.status})`);
         }
-        positions.tilt = result.angle;
-        renderAxis("tilt");
-        addLog(`Connected to tilt servo at ${result.angle > 0 ? "+" : ""}${result.angle}°.`);
+        if (result.speed !== 0 && activeBaseSpeed === 0) {
+          renderBaseSpeed(0);
+          queueBaseSpeed(0);
+        } else if (activeBaseSpeed === 0) {
+          renderBaseSpeed(0);
+        }
+        addLog("Connected to base servo.");
       })
       .catch((error) => {
-        addLog(`Could not connect to tilt servo: ${error.message}`);
+        addLog(`Could not connect to base servo: ${error.message}`);
       });
   </script>
 </body>

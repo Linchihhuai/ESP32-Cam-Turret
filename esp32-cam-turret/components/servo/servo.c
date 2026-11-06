@@ -4,17 +4,20 @@
 #include <stdint.h>
 
 #include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define SERVO_PWM_FREQUENCY_HZ 50
 #define SERVO_DUTY_RESOLUTION LEDC_TIMER_14_BIT
 #define SERVO_DUTY_MAX_COUNTS 16383U
-#define SERVO_MIN_ANGLE_DEGREES -90.0f
-#define SERVO_MAX_ANGLE_DEGREES 90.0f
-#define SERVO_MIN_PULSE_US 500U
-#define SERVO_MAX_PULSE_US 2500U
+#define SERVO_MIN_SPEED_PERCENT -100
+#define SERVO_MAX_SPEED_PERCENT 100
+#define SERVO_NEUTRAL_PULSE_US 1500
+#define SERVO_PULSE_US_PER_PERCENT 10
 
 static bool initialized;
-static float current_angle_degrees;
+static int current_speed_percent;
+static SemaphoreHandle_t servo_mutex;
 
 esp_err_t servo_init(gpio_num_t signal_gpio)
 {
@@ -51,45 +54,59 @@ esp_err_t servo_init(gpio_num_t signal_gpio)
         return err;
     }
 
+    servo_mutex = xSemaphoreCreateMutex();
+    if (servo_mutex == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
     initialized = true;
-    current_angle_degrees = 0.0f;
+    current_speed_percent = 0;
     return ESP_OK;
 }
 
-esp_err_t servo_set_angle(float angle_degrees)
+esp_err_t servo_set_speed(int speed_percent)
 {
     if (!initialized) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (angle_degrees < SERVO_MIN_ANGLE_DEGREES || angle_degrees > SERVO_MAX_ANGLE_DEGREES) {
+    if (speed_percent < SERVO_MIN_SPEED_PERCENT || speed_percent > SERVO_MAX_SPEED_PERCENT) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    const float normalized_angle = (angle_degrees + 90.0f) / 180.0f;
-    const uint32_t pulse_width_us = SERVO_MIN_PULSE_US +
-                                    (uint32_t)((SERVO_MAX_PULSE_US - SERVO_MIN_PULSE_US) * normalized_angle);
+    if (xSemaphoreTake(servo_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_FAIL;
+    }
+
+    const uint32_t pulse_width_us = (uint32_t)(SERVO_NEUTRAL_PULSE_US +
+                                               speed_percent * SERVO_PULSE_US_PER_PERCENT);
     const uint32_t duty = (pulse_width_us * SERVO_PWM_FREQUENCY_HZ * SERVO_DUTY_MAX_COUNTS) / 1000000U;
 
     esp_err_t err = ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
     if (err != ESP_OK) {
+        xSemaphoreGive(servo_mutex);
         return err;
     }
     err = ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
     if (err == ESP_OK) {
-        current_angle_degrees = angle_degrees;
+        current_speed_percent = speed_percent;
     }
+    xSemaphoreGive(servo_mutex);
     return err;
 }
 
-esp_err_t servo_get_angle(float *angle_degrees)
+esp_err_t servo_get_speed(int *speed_percent)
 {
-    if (angle_degrees == NULL) {
+    if (speed_percent == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
     if (!initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    *angle_degrees = current_angle_degrees;
+    if (xSemaphoreTake(servo_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    *speed_percent = current_speed_percent;
+    xSemaphoreGive(servo_mutex);
     return ESP_OK;
 }

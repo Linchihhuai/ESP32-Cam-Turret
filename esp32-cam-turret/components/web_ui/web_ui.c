@@ -14,13 +14,12 @@
 #include "esp_netif.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_wifi.h"
-#if CONFIG_CAM_ENABLE
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#endif
+#include "freertos/timers.h"
 #include "servo.h"
 
 #define REQUEST_BODY_MAX_LENGTH 64
+#define BASE_COMMAND_TIMEOUT_MS 700
 #if CONFIG_CAM_ENABLE
 #include "cam.h"
 #define STREAM_HTTP_PORT 81
@@ -29,6 +28,7 @@
 
 static const char *TAG = "turret_web";
 static httpd_handle_t server;
+static TimerHandle_t base_command_timer;
 #if CONFIG_CAM_ENABLE
 static httpd_handle_t stream_server;
 static const char *STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" STREAM_BOUNDARY;
@@ -81,29 +81,41 @@ static esp_err_t send_error(httpd_req_t *request, const char *status, const char
     return httpd_resp_sendstr(request, message);
 }
 
-static esp_err_t get_tilt_handler(httpd_req_t *request)
+static void base_command_timeout_callback(TimerHandle_t timer)
 {
-    float angle_degrees;
-    const esp_err_t err = servo_get_angle(&angle_degrees);
+    (void)timer;
+    const esp_err_t err = servo_set_speed(0);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read tilt servo position: %s", esp_err_to_name(err));
-        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to read tilt servo position.\"}");
+        ESP_LOGE(TAG, "Failed to stop base servo after command timeout: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGW(TAG, "Base command timed out; servo stopped");
+}
+
+static esp_err_t get_base_handler(httpd_req_t *request)
+{
+    int speed_percent;
+    const esp_err_t err = servo_get_speed(&speed_percent);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read base servo command: %s", esp_err_to_name(err));
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to read base servo command.\"}");
     }
 
     char response[32];
-    const int response_length = snprintf(response, sizeof(response), "{\"angle\":%.0f}", (double)angle_degrees);
+    const int response_length = snprintf(response, sizeof(response), "{\"speed\":%d}", speed_percent);
     if (response_length < 0 || (size_t)response_length >= sizeof(response)) {
-        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to format tilt position.\"}");
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to format base command.\"}");
     }
 
     httpd_resp_set_type(request, "application/json");
     return httpd_resp_send(request, response, response_length);
 }
 
-static esp_err_t set_tilt_handler(httpd_req_t *request)
+static esp_err_t set_base_handler(httpd_req_t *request)
 {
     if (request->content_len == 0 || request->content_len > REQUEST_BODY_MAX_LENGTH) {
-        return send_error(request, "400 Bad Request", "{\"error\":\"Expected a small body containing an angle.\"}");
+        return send_error(request, "400 Bad Request", "{\"error\":\"Expected a small body containing a speed command.\"}");
     }
 
     char body[REQUEST_BODY_MAX_LENGTH + 1];
@@ -119,28 +131,51 @@ static esp_err_t set_tilt_handler(httpd_req_t *request)
 
     errno = 0;
     char *end = NULL;
-    const long requested_angle = strtol(body, &end, 10);
-    if (end == body || errno == ERANGE || *end != '\0' || requested_angle < -90 || requested_angle > 90) {
-        return send_error(request, "400 Bad Request", "{\"error\":\"Angle must be a whole number from -90 to 90.\"}");
+    const long requested_speed = strtol(body, &end, 10);
+    if (end == body || errno == ERANGE || *end != '\0' || requested_speed < -100 || requested_speed > 100) {
+        return send_error(request, "400 Bad Request", "{\"error\":\"Speed must be a whole number from -100 to 100.\"}");
     }
 
-    const float angle_degrees = (float)requested_angle;
-
-    const esp_err_t err = servo_set_angle(angle_degrees);
+    int current_speed;
+    esp_err_t err = servo_get_speed(&current_speed);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set tilt servo to %.0f degrees: %s",
-                 (double)angle_degrees, esp_err_to_name(err));
-        return send_error(request, "500 Internal Server Error", "{\"error\":\"Tilt servo could not be updated.\"}");
+        ESP_LOGE(TAG, "Failed to read current base servo speed: %s", esp_err_to_name(err));
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Base servo state could not be read.\"}");
     }
 
-    ESP_LOGI(TAG, "Tilt servo set to %.0f degrees", (double)angle_degrees);
+    err = servo_set_speed((int)requested_speed);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set base servo speed to %ld%%: %s",
+                 requested_speed, esp_err_to_name(err));
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Base servo could not be updated.\"}");
+    }
+    if (requested_speed != current_speed) {
+        ESP_LOGI(TAG, "Base servo command: %ld%%", requested_speed);
+    }
+
+    if (requested_speed == 0) {
+        if (xTimerStop(base_command_timer, pdMS_TO_TICKS(10)) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to stop base command timeout timer");
+            return send_error(request, "500 Internal Server Error", "{\"error\":\"Could not stop base command timer.\"}");
+        }
+    } else if (xTimerChangePeriod(base_command_timer,
+                                  pdMS_TO_TICKS(BASE_COMMAND_TIMEOUT_MS),
+                                  pdMS_TO_TICKS(10)) != pdPASS) {
+        const esp_err_t stop_err = servo_set_speed(0);
+        if (stop_err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to stop base servo after timer error: %s", esp_err_to_name(stop_err));
+        }
+        ESP_LOGE(TAG, "Failed to refresh base command timeout timer");
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Could not refresh base command timer.\"}");
+    }
 
     char response[32];
-    const int response_length = snprintf(response, sizeof(response), "{\"angle\":%ld}", requested_angle);
+    const int response_length = snprintf(response, sizeof(response), "{\"speed\":%ld}", requested_speed);
     if (response_length < 0 || (size_t)response_length >= sizeof(response)) {
-        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to format tilt position.\"}");
+        return send_error(request, "500 Internal Server Error", "{\"error\":\"Failed to format base command.\"}");
     }
 
+    ESP_LOGD(TAG, "Base servo speed command: %ld%%", requested_speed);
     httpd_resp_set_type(request, "application/json");
     return httpd_resp_send(request, response, response_length);
 }
@@ -274,8 +309,20 @@ esp_err_t web_ui_start(void)
 
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "SoftAP start failed");
 
+    base_command_timer = xTimerCreate("base_stop",
+                                      pdMS_TO_TICKS(BASE_COMMAND_TIMEOUT_MS),
+                                      pdFALSE,
+                                      NULL,
+                                      base_command_timeout_callback);
+    if (base_command_timer == NULL) {
+        ESP_LOGE(TAG, "Failed to create base command timeout timer");
+        return ESP_ERR_NO_MEM;
+    }
+
     httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
-    server_config.send_wait_timeout = 30;
+    // Both HTTP servers share LWIP_MAX_SOCKETS; leave room for their internal sockets.
+    server_config.max_open_sockets = 2;
+    server_config.lru_purge_enable = true;
     ESP_RETURN_ON_ERROR(httpd_start(&server, &server_config), TAG, "HTTP server start failed");
 
     const httpd_uri_t index_uri = {
@@ -283,19 +330,19 @@ esp_err_t web_ui_start(void)
         .method = HTTP_GET,
         .handler = index_handler,
     };
-    const httpd_uri_t get_tilt_uri = {
-        .uri = "/api/tilt",
+    const httpd_uri_t get_base_uri = {
+        .uri = "/api/base",
         .method = HTTP_GET,
-        .handler = get_tilt_handler,
+        .handler = get_base_handler,
     };
-    const httpd_uri_t set_tilt_uri = {
-        .uri = "/api/tilt",
+    const httpd_uri_t set_base_uri = {
+        .uri = "/api/base",
         .method = HTTP_POST,
-        .handler = set_tilt_handler,
+        .handler = set_base_handler,
     };
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &index_uri), TAG, "Control page route registration failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &get_tilt_uri), TAG, "Tilt read route registration failed");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &set_tilt_uri), TAG, "Tilt control route registration failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &get_base_uri), TAG, "Base read route registration failed");
+    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &set_base_uri), TAG, "Base control route registration failed");
     ESP_LOGI(TAG, "HTTP control server started on port %d", server_config.server_port);
 
 #if CONFIG_CAM_ENABLE
@@ -303,7 +350,7 @@ esp_err_t web_ui_start(void)
     stream_config.server_port = STREAM_HTTP_PORT;
     stream_config.ctrl_port = server_config.ctrl_port + 1;
     stream_config.max_open_sockets = 1;
-    stream_config.send_wait_timeout = 30;
+    stream_config.lru_purge_enable = true;
     esp_err_t stream_err = httpd_start(&stream_server, &stream_config);
     if (stream_err == ESP_OK) {
         const httpd_uri_t camera_stream_uri = {

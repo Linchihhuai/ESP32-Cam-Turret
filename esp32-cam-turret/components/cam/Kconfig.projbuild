@@ -7,6 +7,14 @@ config CAM_ENABLE
         Enable camera initialization and the MJPEG stream. Leave disabled to
         run the control webpage and servo without starting the camera.
 
+config CAM_CAPTURE_TEST
+    bool "Run camera-only capture diagnostic"
+    depends on CAM_ENABLE
+    default n
+    help
+        Initialize the camera and attempt three frame captures without starting
+        Wi-Fi, the control webpage, or the MJPEG server.
+
 config CAM_PIN_XCLK
     int "Camera XCLK GPIO"
     default 15
